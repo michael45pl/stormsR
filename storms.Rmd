@@ -5,26 +5,58 @@ date: "5/9/2022"
 output: html_document
 ---
 
+#Setup - Getting Libraries, and Datasets
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+library(dplyr) 
+library(ggplot2)
+library(geosphere)
+storms<-dplyr::storms
+accidents = read.csv("https://raw.githubusercontent.com/yumouqiu/DS202-Spring2022/main/Practice/data/fars2016/accident.csv")
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+##Renaming storms columns so that it can be merged with accidents
+```{r}
+storms = storms %>% rename (
+    HOUR = hour,
+    DAY = day,
+    MONTH = month,
+    YEAR = year,
+    LATITUDE = lat,
+    LONGITUD = long,
+) 
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+##merging accidents with stomrs by time and location into a new dataset called combine
+```{r}
+combine <- merge(x = accidents, y = storms, by=c("DAY", "MONTH", "YEAR"), all = FALSE)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+##remove entries that have longitud above 360 since they don't make sense
+```{r}
+clean <- subset(combine, LONGITUD.x<360)
+```
+
+##calculate the distance between the storm and the accident using the given longitud and latitude and convert to miles
+```{r}
+clean <- clean %>% rowwise() %>% 
+    mutate(DST = (distm(c(LONGITUD.x, LATITUDE.x), c(LONGITUD.y, LATITUDE.y), fun = distHaversine)/1609.34))
+```
+
+
+##Removing entries that are outside the tropicalstorm force diameter(winds strengths of 34 knots) using the diameter split in half then multiplied by 1.5
+```{r}
+cleaned <- clean[!( (clean$DST) >
+                ((clean$tropicalstorm_force_diameter/2)*1.5)),]
+
+```
+
+
+```{r}
+
+```
+
+
+
+
+
+
