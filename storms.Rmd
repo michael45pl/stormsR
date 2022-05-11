@@ -26,37 +26,87 @@ storms = storms %>% rename (
 ) 
 ```
 
-##merging accidents with stomrs by time and location into a new dataset called combine
+##merging accidents with storms by time and location into a new dataset called combine
 ```{r}
 combine <- merge(x = accidents, y = storms, by=c("DAY", "MONTH", "YEAR"), all = FALSE)
 ```
 
-##remove entries that have longitud above 360 since they don't make sense
+##remove entries that have longitude above 360 since they don't make sense 
 ```{r}
 clean <- subset(combine, LONGITUD.x<360)
 ```
 
-##calculate the distance between the storm and the accident using the given longitud and latitude and convert to miles
+##calculate the distance between the storm and the accident using the given longitude and latitude and convert to miles.  Also calculate the time between notified to arrivial and arrivial to hospital in mins.
 ```{r}
 clean <- clean %>% rowwise() %>% 
-    mutate(DST = (distm(c(LONGITUD.x, LATITUDE.x), c(LONGITUD.y, LATITUDE.y), fun = distHaversine)/1609.34))
+    mutate(DST = (distm(c(LONGITUD.x, LATITUDE.x), c(LONGITUD.y, LATITUDE.y), fun = distHaversine)/1609.34), NOT_to_ARR = ((ARR_HOUR*60 + ARR_MIN)-(NOT_HOUR*60 + NOT_MIN)), ARR_to_HOS = ((HOSP_HR*60 + HOSP_MN)-(ARR_HOUR*60 + ARR_MIN)))
+
 ```
 
-
-##Removing entries that are outside the tropicalstorm force diameter(winds strengths of 34 knots) using the diameter split in half then multiplied by 1.5
+##removing entries that are outside the tropicalstorm force diameter(winds strengths of 34 knots)
 ```{r}
 cleaned <- clean[!( (clean$DST) >
-                ((clean$tropicalstorm_force_diameter/2)*1.5)),]
-
+                (clean$tropicalstorm_force_diameter)*2),]
 ```
 
-
+##get rid of entries that have unrealistic times
 ```{r}
-
+cleaned <- subset(cleaned, NOT_HOUR<24 & NOT_MIN<60 & ARR_HOUR<24 & ARR_MIN<60 & HOSP_HR<24 & HOSP_MN<60 & ARR_to_HOS>0 & NOT_to_ARR>0)
 ```
 
+##get rid of columns that I'm not interested in
+```{r}
+selected = subset(cleaned, select = -c(CITY, STATE, ST_CASE, FUNC_SYS, RUR_URB, RD_OWNER, ROUTE, TWAY_ID, TWAY_ID2, NHS, MILEPT, SP_JUR, RELJCT1, RELJCT2, TYP_INT, WRK_ZONE, SCH_BUS, RAIL, name, LATITUDE.x, LATITUDE.y, LONGITUD.x, LONGITUD.y, REL_ROAD, DAY_WEEK, DAY, MONTH, YEAR, PVH_INVL, COUNTY, HOUR.x, HOUR.y, CF1, CF2, CF3, wind, pressure, DRUNK_DR, FATALS, WEATHER1, WEATHER2, WEATHER, LGT_COND, MINUTE, MAN_COLL, HARM_EV, NOT_HOUR, NOT_MIN, ARR_HOUR, ARR_MIN, HOSP_HR, HOSP_MN, status, category, VE_FORMS, hurricane_force_diameter, tropicalstorm_force_diameter, PERNOTMVIT))
+```
 
+##convert to categorical variables 
+```{r}
+selected$VE_TOTAL <- as.factor(selected$VE_TOTAL)
+selected$PEDS <- as.factor(selected$PEDS)
+selected$PERSONS <- as.factor(selected$PERSONS)
+selected$PERMVIT <- as.factor(selected$PERMVIT)
+```
 
+##boxplot for comparison between vehicles involved in the accident and distance to storm
+```{r}
+ggplot(data = selected, aes(x = VE_TOTAL, y = DST)) +
+  geom_boxplot() + ylab("Distance") + xlab("Vehicles Involved") + ggtitle("Amount of vehicles by distance")
+```
+My expectations is that the closer to storm that the accident happened the less vehicles will be involved because accidents will be caused by the storm not interactions with other vehicles.  My expectation is partially met while it distance seems to be trending down with the less vehicles involved. There are a lot of outlines for 1 and vehicle accidents 
 
+##boxplot for comparison between pedestrians involved in the accident and distance to storm
+```{r}
+ggplot(data = selected, aes(x = PEDS, y = DST)) +
+  geom_boxplot()+ ylab("Distance") + xlab("Pedistrians Involved") + ggtitle("Amount of pedestrians by distance")
+```
+My expectations were that the closer to the storm the fewer pedestrians would be involved in the accidents since that usually regarding hurricanes there's an announcement telling people to stay inside.  My expectations were mostly met with 0 pedestrians being below 500 while above that were 1 pedestrians the outlive to my expectations was 2 pedestrians which had a majority below 500 but that my have been caused by the low amount of accidents within my dataset that had 2 pedestrians. 
+
+##boxplot for comparison between vehicles involved in the accident grouped by pedestrians and distance to storm
+```{r}
+ggplot(data = selected, aes(x = VE_TOTAL, y = DST)) +
+  geom_boxplot() + facet_wrap(~PEDS) + ylab("Distance") + xlab("Vehicles Involved") + ggtitle("Vehicles grouped by pedestrians involved by distance")
+```
+My expectations were that accidents in the zero pedestrian plot would be the closest to the storms with the lowest distance since pedestrians wouldn't be out and about.   My expectations were mostly meet in that accidents having no pedestrians did have lower distances but there were outliers with 2 pedestrians especially with 1 vehicle that had the lowest distance.  This might have been caused by the low amount of accidents I had in my dataset with pedestrians this might have been caused be cause I set my distance from the storm for my dataset to be too small and removed a lot of the accidents that had pedestrians involved. 
+
+##scatter plot for time being notified and arrival by distance
+```{r}
+ggplot(data = selected, aes(x = DST, y = NOT_to_ARR)) +
+  geom_point() + geom_smooth(method=lm) + xlab("Distance") + ylab("Time from Notified to Arrival") + ggtitle("Distance to storm by time to arrive")
+```
+My expectations where that the closer to the storm the storm the faster the time would be since the would be expecting and ready for calls also the storms would decrease the amount of traffic that would slow down assistance.  My expectations where mostly meet but there was a wide range in points this could be caused by a wide range of issues since there are many factors that can affect this such as distance to the accident, number of calls, etc. so it's hard to say for sure what affect distance to the storm really has. 
+
+##scatter plot for time of arrival to hospital by distance
+```{r}
+ggplot(data = selected, aes(x = DST, y = ARR_to_HOS)) +
+  geom_point() + geom_smooth(method=lm) + xlab("Distance") + ylab("Time from Arrival to Hospital") + ggtitle("Distance to storm by time to Hospital")
+```
+My expectations where that the closer to the storm the storm the faster the time would be since the storms would decrease the amount of traffic that would slow down travel.  My expectations where mostly meet but there was a wide range in points this could be caused by a wide range of issues since there are many factors that can affect this such as distance to the accident so it's hard to say for sure what affect distance to the storm really has. 
+
+##filtered by people involved
+```{r}
+ggplot(data = selected, aes(x = DST, y = ARR_to_HOS, color=PERSONS, shape=PERSONS)) +
+  geom_point() + geom_smooth(method=lm, se=FALSE, fullrange=TRUE) + xlab("Distance") + ylab("Time from Arrival to Hospital") + ggtitle("Distance to storm by time to Hospital")
+```
+My expectations were that the closer to the storm and the more people involved in the accidents the longer it would take to get to the hospital since now it would create a larger drain on the medical assistance resources available and as such would slow down assistance.  My expectations were meet the outlier for this was 3 people accidents which seemed to have a faster time the closer to the storm it was.  Again it hard to say that this trend will hold up because of the few points available for the higher number people involved accidents and also the many factors as mentioned above.  
 
 
